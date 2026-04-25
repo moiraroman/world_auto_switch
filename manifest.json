@@ -1,0 +1,7 @@
+{
+  "name": "World Auto Switch",
+  "version": "1.0.0",
+  "author": "you",
+  "description": "Auto switch world info when character changes",
+  "main": "index.js"
+}
