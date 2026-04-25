@@ -1,5 +1,6 @@
 import { eventSource, event_types } from "../../../../script.js";
 import { getContext } from "../../../../extensions.js";
+import { selected_world_info, world_names } from "../../../world-info.js";
 
 const STORAGE_KEY = "world_auto_switch_map";
 
@@ -25,43 +26,53 @@ function saveMap() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(characterWorldMap));
 }
 
-// 获取当前角色ID（比name稳定）
+// 获取当前角色ID（使用 characterId 索引取 avatar）
 function getCharacterId() {
     const context = getContext();
-    return context?.character?.avatar;
+    const chid = context.characterId;
+    if (chid === undefined || chid === null) return null;
+    return context.characters[chid]?.avatar;
 }
 
-// 获取当前世界书列表
+// 获取当前全局世界书列表（从 selected_world_info 读取）
 function getCurrentWorlds() {
-    const context = getContext();
-    return context?.worldInfo?.map(w => w.name) || [];
+    return [...selected_world_info];
 }
 
-// 清空世界书
-async function clearWorlds() {
-    const context = getContext();
-    if (!context?.worldInfo) return;
-
-    for (const wi of [...context.worldInfo]) {
-        await context.removeWorldInfo(wi.name);
-    }
+// 清空全局世界书选择
+function clearWorlds() {
+    selected_world_info.length = 0;
+    // 同步 UI：取消所有选中项
+    $('#world_info option').prop('selected', false);
+    $('#world_info').trigger('change');
 }
 
-// 加载世界书列表
-async function loadWorlds(worldList) {
-    const context = getContext();
+// 加载世界书列表到全局选择
+function loadWorlds(worldList) {
+    // 逐个添加到 selected_world_info 并选中对应 option
     for (const name of worldList) {
-        await context.addWorldInfo(name);
+        if (world_names.includes(name) && !selected_world_info.includes(name)) {
+            selected_world_info.push(name);
+        }
     }
+    // 同步 UI：选中对应 option
+    for (const name of worldList) {
+        const wiElement = $('#world_info').children().filter(function () {
+            return $(this).text().toLowerCase() === name.toLowerCase();
+        });
+        if (wiElement.length) {
+            wiElement.prop('selected', true);
+        }
+    }
+    $('#world_info').trigger('change');
 }
 
 // ---------- 核心逻辑 ----------
 
-async function onCharacterChanged() {
-    const context = getContext();
+async function onChatChanged() {
     const currentId = getCharacterId();
 
-    // ---------- 1️⃣ 保存“旧角色”的世界书 ----------
+    // ---------- 1️⃣ 保存"旧角色"的世界书 ----------
     if (lastCharacterId) {
         const worlds = getCurrentWorlds();
 
@@ -77,13 +88,13 @@ async function onCharacterChanged() {
     if (!currentId) return;
 
     // 清空当前世界书
-    await clearWorlds();
+    clearWorlds();
 
     // 加载新角色的世界书（如果存在）
     const targetWorlds = characterWorldMap[currentId];
 
     if (targetWorlds && targetWorlds.length > 0) {
-        await loadWorlds(targetWorlds);
+        loadWorlds(targetWorlds);
         console.log("[WorldAuto] Loaded:", currentId, targetWorlds);
     } else {
         console.log("[WorldAuto] No saved worlds for:", currentId);
@@ -93,7 +104,7 @@ async function onCharacterChanged() {
     lastCharacterId = currentId;
 }
 
-// 注册事件
-eventSource.on(event_types.CHARACTER_CHANGED, onCharacterChanged);
+// 注册事件：CHAT_CHANGED 在切换角色/聊天时触发
+eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
 
 console.log("[WorldAuto] Loaded");
